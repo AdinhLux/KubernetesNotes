@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: myapp-replicaset
+  labels:
+    app: myapp
+    type: front-end
+spec:
+  # Pod template, defined in previous .yml file
+  template:
+    metadata:
+      name: myapp-pod
+      labels:
+        app: myapp
+        type: front-end
+    spec:
+      containers:
+        - name: nginx-container
+          image: nginx
+  # Minimum instances of Pods
+  replicas: 3
+  # Required by the Replica Set. It helps to specify what parts fall under it. Because RS can also manage parts that were not created as part of the RS creation
+  selector:
+    # Managing Pods having the label 'type: front-end'
+    matchLabels:
+      type: front-end

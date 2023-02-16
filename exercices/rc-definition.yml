@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ReplicationController
+# Data about the RC
+metadata:
+  name: myapp-rc
+  labels:
+    app: myapp
+    type: front-end
+spec:
+  # Pod template, defined in previous .yml file
+  template:
+    metadata:
+      name: myapp-pod
+      labels:
+        app: myapp
+        type: front-end
+    spec:
+      containers:
+        - name: nginx-container
+          image: nginx
+  # Minimum instances of Pods
+  replicas: 3

@@ -1,0 +1,16 @@
+# Version of the Kubernetes API, used to create objects
+apiVersion: v1
+# The type of object we want to create
+kind: Pod
+# Data about the object
+metadata:
+  name: myapp-pod
+  # Kind of identifier to distuinguish a pod among 1000 others
+  labels:
+    app: myapp
+    type: front-end
+# Pod properties (here, only a nginx container)
+spec:
+  containers:
+    - name: nginx-container
+      image: nginx
