@@ -892,3 +892,247 @@ spec:
     <i>Having PODs into a Deployment object can help us to scale up / down our application</i>
   </div>
 </div>
+
+&nbsp;
+
+## Kubeadm
+
+We will install a Kubernetes environment, using `Kubeadm`. Here are the following steps :
+
+- Having multiple VMs created for configuring a cluster. Once the systems are created, designate one as master and others as worker nodes.
+
+- Installing a container runtime on the hosts.
+
+- Installing `kubeadmin` tool on all the nodes. The kubeadmin tool helps us bootstrap the kubernetes solution by installing and configuring all the required components in the right nodes.
+
+- Initializing the Master server. During this process all the required components are installed and configured on the master server. That way we can start the cluster level configurations from the master server.
+
+- Ensuring that the network pre-requisites are met. A normal network connectivity between the systems is not SUFFICIENT for this. Kubernetes requires a special network between the master and worker nodes which is called as a `POD network`
+
+- The last step is to join the worker nodes to the master node. We are then all set to launch our application in the kubernetes environment.
+
+<!--- Center image --->
+<div align="center">
+  <a href="assets/Kubernetes_Kubeadm_1.jpg" target="_blank">
+    <img src="assets/Kubernetes_Kubeadm_1.jpg" alt="Settings_1" width="650" height="400"/>
+  </a>
+</div>
+
+&nbsp;
+
+### Steps for preparing the environment
+
+- Install `Vagrant`
+- `git clone git@github.com:kodekloudhub/certified-kubernetes-administrator-course.git`
+- Edit `Vagrantfile` for checking settings
+
+```yaml
+# Define the number of master and worker nodes
+# If this number is changed, remember to update setup-hosts.sh script with the new hosts IP details in /etc/hosts of each VM.
+NUM_MASTER_NODE = 1
+NUM_WORKER_NODE = 2
+
+## VM will get an IP address in this range. Be sure to NOT match your private network
+IP_NW = "192.168.56."
+MASTER_IP_START = 1
+NODE_IP_START = 2
+```
+
+- Run the command to check your cluster status `vagrant status`
+
+```
+Current machine states:
+
+kubemaster                not created (virtualbox)
+kubenode01                not created (virtualbox)
+kubenode02                not created (virtualbox)
+
+This environment represents multiple VMs. The VMs are all listed
+above with their current state. For more information about a specific
+VM, run `vagrant status NAME`.
+```
+
+- Provision the VMs : `vagrant up`
+
+```
+Bringing machine 'kubemaster' up with 'virtualbox' provider...
+Bringing machine 'kubenode01' up with 'virtualbox' provider...
+Bringing machine 'kubenode02' up with 'virtualbox' provider...
+
+...
+```
+
+Be sure it doesn't match your private network
+
+```
+The specified host network collides with a non-hostonly network!
+This will cause your specified IP to be inaccessible. Please change
+the IP or name of your host only network so that it no longer matches that of
+a bridged or non-hostonly network.
+
+Bridged Network Address: '192.168.178.0'
+Host-only Network 'Realtek RTL8852AE WiFi 6 802.11ax PCIe Adapter': '192.168.178.0'
+```
+
+- Check if they are running : `vagrant status`
+
+```
+Current machine states:
+
+kubemaster                running (virtualbox)
+kubenode01                running (virtualbox)
+kubenode02                running (virtualbox)
+```
+
+- To access one of the systems (for example `kubemaster`) : `vagrant ssh kubemaster`
+
+```
+Welcome to Ubuntu 18.04.6 LTS (GNU/Linux 4.15.0-204-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Fri Feb 17 19:12:46 UTC 2023
+
+  ...
+```
+
+&nbsp;
+
+### Provisionning cluster using Kubeadm (Docker install)
+
+&nbsp;
+
+> First install pre-requisites on every nodes (`kubemaster`, `kubenode01`, `kubenode02`) :
+
+> `https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/`
+
+> `https://bikramat.medium.com/set-up-a-kubernetes-cluster-with-kubeadm-508db74028ce`
+
+> `https://lachlandeer.github.io/installation-guide/docker/`
+
+- Bridge Traffic on all nodes
+
+```bash
+vagrant@kubemaster:~$ lsmod | grep br_netfilter
+vagrant@kubemaster:~$ sudo modprobe br_netfilter
+vagrant@kubemaster:~$ lsmod | grep br_netfilter
+br_netfilter           24576  0
+bridge                155648  1 br_netfilter
+
+vagrant@kubemaster:~$ cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+ net.bridge.bridge-nf-call-ip6tables = 1
+ net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+vagrant@kubemaster:~$ sudo sysctl --system
+```
+
+- Install Docker on all nodes
+
+```bash
+# Install packages to allow apt to use a repository over HTTPS
+vagrant@kubemaster:~$ sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg2
+
+# Add Docker's official GPG key
+vagrant@kubemaster:~$ sudo -i
+root@kubemaster:~$ sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+
+# Add Docker apt repository
+root@kubemaster:~$ sudo add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+
+# Install Docker CE
+root@kubemaster:~$ sudo apt-get install docker-ce docker-ce-cli containerd.io
+
+# Setup Docker daemon
+root@kubemaster:~$ cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+root@kubemaster:~$ mkdir -p /etc/systemd/system/docker.service.d
+
+# Restart Docker
+root@kubemaster:~$ systemctl daemon-reload
+root@kubemaster:~$ systemctl restart docker
+root@kubemaster:~$ systemctl status docker
+```
+
+- Install Kube packages on all nodes
+
+```bash
+root@kubemaster:~$ sudo apt-get update && sudo apt-get install -y apt-transport-https curl
+root@kubemaster:~$ sudo curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+root@kubemaster:~$ sudo cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+root@kubemaster:~$ sudo apt-get update
+root@kubemaster:~$ sudo apt-get install -y kubelet kubeadm kubectl
+root@kubemaster:~$ sudo apt-mark hold kubelet kubeadm kubectl
+```
+
+- ~~Configuring cgroup driver~~ (Not necessary when using Docke~r, Kubaadm will detect it automatically)
+- ~~Initializing a control plane node~~ (only applicable if we're deployin an High Available cluster)
+- Configuring POD Network (we will use a CIDR network different from nodes)
+
+> We must specify the Kubernetes API server's IP address as the `API server advertise address`, to listen on the static IP address we have on the master node which will make it accessible to the worker nodes or any other clients.
+
+```bash
+~$ vagrant ssh kubemaster
+
+# Check master IP address
+root@kubemaster:~$ ifconfig
+
+enp0s8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.56.2  netmask 255.255.255.0  broadcast 192.168.56.255
+
+
+# In case you have [ERROR CRI]: container runtime is not running (https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/)
+root@kubemaster:~$  rm /etc/containerd/config.toml
+root@kubemaster:~$  systemctl restart containerd
+
+# It proceeds withe the creation of security certificates and various components. Also save output to a file in case you clear the console without having copied the token
+root@kubemaster:~$ kubeadm init --pod-network-cidr 10.244.0.0/16 --apiserver-advertise-address=192.168.56.2 >> KubeAdmInit.txt
+
+# You can also wave it into terminal history
+echo "kubeadm join 192.168.56.2:6443 --token 7tcnxp.ngjwi6rz8g0dg8r1 \
+        --discovery-token-ca-cert-hash sha256:f66227abbc1b9d78177c5045ea0267ed54f6c860f9f62f9c0549c29e917b3627"
+
+# To start the cluster, you need to run the following as a regular user
+# admin.conf file has the necessary information and credentails required to access the Kubernetes
+root@kubemaster:~$ logout
+vagrant@kubemaster:~$ mkdir -p $HOME/.kube
+vagrant@kubemaster:~$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+vagrant@kubemaster:~$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+# By checking the node, you will see it is not ready because we do not have a pod network solution
+vagrant@kubemaster:~$ kubectl get nodes
+
+NAME         STATUS     ROLES           AGE     VERSION
+kubemaster   NotReady   control-plane   4m58s   v1.26.1
+
+# Install POD network
+vagrant@kubemaster:~$ kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+```
+
+> Then you can join any number of worker nodes by running the following on each as root:
+
+```bash
+vagrant@kubemaster:~$ kubeadm join 192.168.56.2:6443 --token 7tcnxp.ngjwi6rz8g0dg8r1 \
+        --discovery-token-ca-cert-hash sha256:f66227abbc1b9d78177c5045ea0267ed54f6c860f9f62f9c0549c29e917b3627
+```
+
+&nbsp;
+
+### Provisionning cluster using Kubeadm (Using kubeadm to Create a Cluster)
