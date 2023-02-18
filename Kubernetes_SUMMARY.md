@@ -1083,7 +1083,14 @@ root@kubemaster:~$ sudo apt-mark hold kubelet kubeadm kubectl
 
 - ~~Configuring cgroup driver~~ (Not necessary when using Docke~r, Kubaadm will detect it automatically)
 - ~~Initializing a control plane node~~ (only applicable if we're deployin an High Available cluster)
-- Configuring POD Network (we will use a CIDR network different from nodes)
+
+&nbsp;
+
+### Provisionning cluster using Kubeadm (Using kubeadm to Create a Cluster)
+
+&nbsp;
+
+We will configure POD Network (we will use a CIDR network different from nodes)
 
 > We must specify the Kubernetes API server's IP address as the `API server advertise address`, to listen on the static IP address we have on the master node which will make it accessible to the worker nodes or any other clients.
 
@@ -1123,16 +1130,57 @@ NAME         STATUS     ROLES           AGE     VERSION
 kubemaster   NotReady   control-plane   4m58s   v1.26.1
 
 # Install POD network
-vagrant@kubemaster:~$ kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+vagrant@kubemaster:~$ kubectl apply -f https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml
+
+serviceaccount/weave-net created
+clusterrole.rbac.authorization.k8s.io/weave-net created
+clusterrolebinding.rbac.authorization.k8s.io/weave-net created
+role.rbac.authorization.k8s.io/weave-net created
+rolebinding.rbac.authorization.k8s.io/weave-net created
+daemonset.apps/weave-net created
 ```
 
 > Then you can join any number of worker nodes by running the following on each as root:
 
 ```bash
-vagrant@kubemaster:~$ kubeadm join 192.168.56.2:6443 --token 7tcnxp.ngjwi6rz8g0dg8r1 \
+# In case you have [ERROR CRI]: container runtime is not running (https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/)
+root@kubenode01:~$  rm /etc/containerd/config.toml
+root@kubenode01:~$  systemctl restart containerd
+
+root@kubenode01:~$ kubeadm join 192.168.56.2:6443 --token 7tcnxp.ngjwi6rz8g0dg8r1 \
         --discovery-token-ca-cert-hash sha256:f66227abbc1b9d78177c5045ea0267ed54f6c860f9f62f9c0549c29e917b3627
+
+[preflight] Running pre-flight checks
+[preflight] Reading configuration from the cluster...
+[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Starting the kubelet
+[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
 ```
 
-&nbsp;
+> Then test your cluster on master
 
-### Provisionning cluster using Kubeadm (Using kubeadm to Create a Cluster)
+```bash
+vagrant@kubemaster:~$ kubectl get nodes
+
+NAME         STATUS   ROLES           AGE     VERSION
+kubemaster   Ready    control-plane   44m     v1.26.1
+kubenode01   Ready    <none>          4m12s   v1.26.1
+kubenode02   Ready    <none>          2m36s   v1.26.1
+
+vagrant@kubemaster:~$ kubectl run nginx --image=nginx
+
+pod/nginx created
+
+vagrant@kubemaster:~$ kubectl get pods
+
+NAME    READY   STATUS    RESTARTS   AGE
+nginx   1/1     Running   0          25s
+```
