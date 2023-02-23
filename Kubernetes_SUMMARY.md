@@ -242,6 +242,33 @@ Containers:
 
 &nbsp;
 
+#### **To update an existing pod**
+
+- Get the Yaml config of the existing pod and sev it into a file
+
+```
+🥃 ~ kubectl run nginx --image nginx
+🥃 ~ kubectl get pod nginx -o yaml > nginx.yaml
+```
+
+- Edit the file and update the pod
+
+```
+🥃 ~ vi nginx.yaml
+🥃 ~ kubectl apply -f nginx.yaml
+
+pod/nginx configured
+```
+
+- Or recreate the pod after having deleted it
+
+```
+🥃 ~ kubectl delete pod nginx
+🥃 ~ kubectl create -f nginx.yaml
+```
+
+&nbsp;
+
 ## ~~Replica Controller~~ (Deprecated)
 
 To avoid an user to lose access to the App when the pod crashes, we need to run at the same time another pod instances.
